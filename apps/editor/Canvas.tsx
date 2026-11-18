@@ -8,6 +8,7 @@ export type Mode='edit'|'play'|'inspect'
 type Props={scene:Scene;world?:World;mode:Mode;selected:string[];assets:Asset[];grid:boolean;zoom:number;onPick:(h:Hit,anchor:Point,multi:boolean)=>void;onMove:(id:string,delta:Point)=>void;onError:(s:string)=>void;onRun:()=>void}
 export function Canvas(props:Props){
  const host=useRef<HTMLDivElement>(null),current=useRef(props),view=useRef<Viewport|null>(null),[ready,setReady]=useState(false),[failed,setFailed]=useState('');current.current=props
+ const summary=useRef(''),[hud,setHud]=useState('')
  const inputs=useRef(noInput()),dirty=useRef(true),clock=useRef(new Clock())
  useEffect(()=>{dirty.current=true;inputs.current=noInput();clock.current.reset()},[props.scene,props.mode,props.grid,props.zoom,props.selected,props.world])
  useEffect(()=>{
@@ -27,6 +28,10 @@ export function Canvas(props:Props){
        if(!document.hidden&&p.mode==='play'&&w&&!w.paused){
          clock.current.advance((now-previous)/1000,()=>{w.step(inputs.current);inputs.current.pressed.clear()})
          if(w.error)p.onError(w.error)
+         const text=[...w.instances.values()].filter(i=>i.def.type==='Label').flatMap(i=>{
+           const props=w.props(i);return props.visible===false?[]:[props.text]
+         }).join(' · ')
+         if(summary.current!==text){summary.current=text;setHud(text)}
        }
        if(!document.hidden&&(dirty.current||p.mode==='play')){v.draw(w?.scene??p.scene,w,p.mode==='play'?[]:p.selected,p.grid,p.zoom);dirty.current=false}
      }catch(e){p.onError((e as Error).message);return}
@@ -56,5 +61,5 @@ export function Canvas(props:Props){
    if(!d||!view.current)return
    const end=point(e);if(Math.hypot(end[0]-d.start[0],end[1]-d.start[1])<3)return
    const a=local(d.hit.parent,d.start),b=local(d.hit.parent,end);props.onMove(d.hit.id,[b[0]-a[0],b[1]-a[1]])
- }}>{failed&&<div className="canvas-error">WebGL 无法启动，请启用浏览器硬件加速。</div>}</div>
+ }}><output className="sr-only" aria-label="试玩 HUD">{props.mode==='edit'?'':hud}</output>{failed&&<div className="canvas-error">WebGL 无法启动，请启用浏览器硬件加速。</div>}</div>
 }

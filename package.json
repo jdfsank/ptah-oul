@@ -10,7 +10,9 @@
     "dev": "concurrently -k \"node --import tsx --env-file-if-exists=.env apps/model-gateway/server.ts\" \"vite\"",
     "build": "tsc --noEmit && vite build",
     "start": "node --import tsx --env-file-if-exists=.env apps/model-gateway/server.ts",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:e2e": "node --import tsx --test tests/browser.e2e.ts",
+    "benchmark": "node tests/benchmark.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "5.3.0",

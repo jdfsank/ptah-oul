@@ -40,14 +40,32 @@ function verifyAction(expr:Expr,id:string,path:string,nodes:Map<string,NodeDef>,
   }
   if(arg&&['SetVisible','SetEnabled','SetInputEnabled'].includes(expr.name)&&typeof value(arg,defaults)!=='boolean')fail('TYPE',id,path,'需要布尔值')
 }
-export function compile(source:string,assets:Iterable<string>=[],allowDetached=false):Scene {
-  const index=indexSource(source),nodes=new Map<string,NodeDef>(),defaults:Values=Object.create(null),byStatement=new Map<string,string>(),assetIds=new Set(assets)
+// Editor, persistence and runtime share the same immutable, fully validated definition.
+const recent:{assets:string;scene:Scene}[]=[]
+function remember(scene:Scene,assets:string[]){
+  recent.unshift({assets:JSON.stringify(assets),scene})
+  if(recent.length>3)recent.pop()
+  return scene
+}
+export function compile(source:string,assets:Iterable<string>=[]):Scene {
+  const ids=[...assets],signature=JSON.stringify(ids),cached=recent.find(item=>item.scene.source===source&&item.assets===signature)
+  return cached?.scene??remember(compileIndex(source,indexSource(source),ids,false),ids)
+}
+function compileIndex(source:string,index:Map<string,Statement>,assets:Iterable<string>,allowDetached:boolean,previous?:Scene):Scene {
+  const nodes=new Map<string,NodeDef>(),defaults:Values=Object.create(null),byStatement=new Map<string,string>(),assetIds=new Set(assets)
   for(const s of index.values())if(s.id.startsWith('$')){
     if(!literal(s.expr))fail('STATE',s.id,'','默认值必须是字面量')
     defaults[s.id]=value(s.expr,{})
   }
+  const reuse=previous&&JSON.stringify(previous.defaults)===JSON.stringify(defaults)?previous:undefined
   for(const s of index.values()){
     if(s.id.startsWith('$'))continue
+    if(reuse&&reuse.index.get(s.id)?.expr===s.expr&&s.expr.k==='Comp'&&s.expr.args[0].k==='Str'&&s.expr.args[2].k==='Arr'){
+      const old=reuse.nodes.get(s.expr.args[0].v)!
+      if(nodes.has(old.id))fail('IDENTITY',s.id,'','重复的节点身份')
+      nodes.set(old.id,{...old,parent:undefined,children:s.expr.args[2].els.map(x=>x.k==='Ref'?x.n:fail('CHILD',s.id,'','需要引用'))})
+      byStatement.set(s.id,old.id);continue
+    }
     const e=s.expr
     if(e.k!=='Comp'||!Object.hasOwn(schemas,e.name)||e.args.length!==3)fail('NODE',s.id,'','需要已注册的三参数节点')
     const [id,obj,refs]=e.args
@@ -108,13 +126,24 @@ export function compile(source:string,assets:Iterable<string>=[],allowDetached=f
   return {source,index,nodes,root,entry,defaults}
 }
 export function applyPatch(scene:Scene,patch:string,assets:Iterable<string>=[]) {
-  const changes=indexSource(patch),raw=new Map([...scene.index].map(([k,v])=>[k,v.raw]))
-  for(const [id,s] of changes)raw.set(id,s.raw)
-  // Validate every supplied declaration before the official merger removes unreachable ones.
-  const candidate=compile([...raw.values()].join('\n'),assets,true)
-  const result=compile(mergeSource(scene.source,patch),assets)
-  for(const [id,s] of changes)if(!result.index.has(id))fail('UNREACHABLE',id,'','补丁声明被剪除')
-  return result
+  const changes=indexSource(patch),raw=new Map(scene.index),assetIds=[...assets]
+  for(const [id,s] of changes){
+    const previous=raw.get(id)?.expr
+    if(s.expr.k==='Null'){
+      if(!previous)fail('DELETE',id,'','待删除声明不存在')
+      raw.delete(id)
+    }else{
+      if(previous?.k==='Comp'&&s.expr.k==='Comp'&&previous.args[0]?.k==='Str'&&s.expr.args[0]?.k==='Str'&&previous.args[0].v!==s.expr.args[0].v)fail('IDENTITY',id,'','补丁必须保留稳定身份')
+      raw.set(id,s)
+    }
+  }
+  const candidate=compileIndex('',raw,assetIds,true,scene)
+  const merged=mergeSource(scene.source,patch,scene.index,changes)
+  if(merged.source.length>500000)fail('SIZE','','','源码过大')
+  for(const [id,s] of changes)if(s.expr.k!=='Null'&&!merged.index.has(id))fail('UNREACHABLE',id,'','补丁声明被剪除')
+  // An identical declaration set has already passed all semantic checks. GC requires a second graph check.
+  const result=raw.size===merged.index.size?{...candidate,...merged}:compileIndex(merged.source,merged.index,assetIds,false,candidate)
+  return remember(result,assetIds)
 }
 export function hotCompatible(a:Scene,b:Scene) {
   if(a.nodes.size!==b.nodes.size||JSON.stringify(a.defaults)!==JSON.stringify(b.defaults))return false

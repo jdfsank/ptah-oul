@@ -104,16 +104,21 @@ export function propertyPatch(s:Statement,key:string,value:unknown,replaceExpres
   if(old)old[1]=toExpr(value);else fields.push([key,toExpr(value)])
   return s.id+' = '+print(node)
 }
-export function mergeSource(source:string,patch:string) {
-  const before=indexSource(source), changes=indexSource(patch)
-  const kept=indexSource(mergeStatements(source,patch,'root'))
+export function mergeSource(source:string,patch:string,before=indexSource(source),changes=indexSource(patch)) {
+  const merged=mergeStatements(source,patch,'root')
+  const kept=new Set(split(tokenize(merged)).map(s=>s.id))
+  const index=new Map<string,Statement>()
   let result='',end=0
+  function append(s:Statement){
+    const start=result.length;result+=s.raw
+    index.set(s.id,{...s,start,end:result.length})
+  }
   for(const s of before.values()) {
     result+=source.slice(end,s.start)
-    if(kept.has(s.id))result+=changes.get(s.id)?.raw??s.raw
+    if(kept.has(s.id))append(changes.get(s.id)??s)
     end=s.end
   }
   result+=source.slice(end)
-  for(const s of changes.values()) if(!before.has(s.id)&&kept.has(s.id))result+='\n'+s.raw
-  return result
+  for(const s of changes.values())if(!before.has(s.id)&&kept.has(s.id)){result+='\n';append(s)}
+  return {source:result,index}
 }

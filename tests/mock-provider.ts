@@ -13,7 +13,7 @@ export async function harness() {
    const chunks=[];for await(const data of req)chunks.push(data)
    const body=JSON.parse(Buffer.concat(chunks).toString());calls.push({path:req.url!,model:body.model,auth:req.headers.authorization})
    if(req.url?.endsWith('images/generations')){
-     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='}]}));return
+     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFUlEQVR4nGP8vyrgPwMSYGJAA4QFAMP1AwDc8DvPAAAAAElFTkSuQmCC'}]}));return
    }
    const string=JSON.stringify(body.input??body.messages)
    const text=string.includes('PATCH_PLAYER')?colorPatch+'\n'+speedPatch:string.includes('INVALID')&&!string.includes('SYNTAX')?'root = GameProject(':source

@@ -10,7 +10,7 @@ const paintable=new Set(['Polygon2D','Sprite2D','AnimatedSprite2D','Label','Butt
 export class Viewport {
  app=new Application();picks=new PickRegistry();private cache=new Map<string,Cached>();private selection=new Graphics();private displayOrder:string[]= []
  private assets=new Map<string,Texture>();private assetData=new Map<string,Uint8Array>();private loadEpoch=0
- async init(host:HTMLElement){await this.app.init({width:960,height:540,background:0x1e243e,preference:'webgl',antialias:true,resolution:Math.min(devicePixelRatio,2),autoDensity:true});this.app.stop();host.appendChild(this.app.canvas);this.app.stage.addChild(this.selection)}
+ async init(host:HTMLElement){await this.app.init({width:960,height:540,background:0x1e243e,preference:'webgl',antialias:false,resolution:Math.min(devicePixelRatio,2),autoDensity:true});this.app.stop();host.appendChild(this.app.canvas);this.app.stage.addChild(this.selection)}
  async textures(assets:Asset[]) {
   const epoch=++this.loadEpoch,newAssets=new Map<string,Texture>()
   try{

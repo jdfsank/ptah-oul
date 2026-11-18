@@ -8,7 +8,7 @@ import topdown from '../../tests/fixtures/topdown.oui?raw'
 import {compile,applyPatch,value,type NodeDef} from '../../packages/scene-compiler'
 import {indexSource,literal,print,propertyPatch} from '../../packages/authoring'
 import {World} from '../../packages/runtime'
-import {fresh,loadProject,saveProject,importProject,exportProject,commit,checkPNG,type Project,type Annotation,type Asset} from '../../packages/project-io'
+import {fresh,loadProject,saveProject,importProject,exportProject,commit,undoTarget,checkPNG,type Project,type Annotation,type Asset} from '../../packages/project-io'
 import {Canvas,type Mode} from './Canvas'
 import {requestSource,draftScene} from './model'
 import type {Point} from '../../packages/editor-tools'
@@ -41,8 +41,9 @@ function App({initial}:{initial:Project}){
  useEffect(()=>{fetch('/api/config').then(r=>r.json()).then(setConfig).catch(()=>{})},[])
  useEffect(()=>{if(!info)return;const t=setTimeout(()=>setInfo(''),4500);return ()=>clearTimeout(t)},[info])
  function run(f:()=>void){try{setError('');f()}catch(e){setError((e as Error).message)}}
- function apply(source:string,label:string,base=p.revision,txId:string=crypto.randomUUID(),notes:Annotation[]=[],assets=p.assets){
+ function apply(source:string,label:string,base=p.revision,txId:string=crypto.randomUUID(),notes:Annotation[]=[],assets=p.assets,reverts?:string){
    const old=current.current,next=commit({...old,assets,annotations:[...old.annotations,...notes]},source,label,base,txId)
+   if(reverts&&next!==old)next.history[next.history.length-1].reverts=reverts
    if(world)world.update(compile(next.source,assets.map(a=>a.id)),next.revision)
    setP(next);setInfo(label);setDraft('')
  }
@@ -66,7 +67,7 @@ function App({initial}:{initial:Project}){
    const patch=propertyPatch(scene.index.get(n.statement)!,key,v,explicit)
    apply(applyPatch(scene,patch,p.assets.map(a=>a.id)).source,'修改 '+title(n)+' · '+key)
  })}
- function undo(){run(()=>{const h=p.history.at(-1);if(h)apply(h.before,'撤销 '+h.label)})}
+ function undo(){run(()=>{const h=undoTarget(p);if(h)apply(h.before,'撤销 '+h.label,p.revision,crypto.randomUUID(),[],p.assets,h.txId)})}
  function exportFile(){run(()=>{const data=exportProject(p),url=URL.createObjectURL(new Blob([new Uint8Array(data)],{type:'application/zip'})),a=document.createElement('a');a.href=url;a.download=p.title+'.ptah.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);setInfo('已导出项目包')})}
  function notes(instruction:string):Annotation[]{return selected.flatMap(key=>{
    const instance=mode==='edit'?undefined:world?.instances.get(key),n=instance?.def??scene.nodes.get(key.slice(1))
@@ -126,7 +127,7 @@ function App({initial}:{initial:Project}){
  <div className="workbench"><aside className={'sidebar '+(mobilePane==='tree'?'mobile-open':'')}><div className="side-head"><b>项目资源</b><Tool icon={Plus} label="打开示例或导入项目" onClick={()=>setDialog('projects')}/></div><div className="side-tabs">{[['scene','场景树'],['assets','素材库']].map(([k,v])=><button className={section===k?'on':''} key={k} onClick={()=>setSection(k)}>{v}</button>)}</div>
  {section==='scene'?<><div className="filter"><Search size={14}/><input aria-label="搜索节点" placeholder="搜索节点…" value={search} onChange={e=>setSearch(e.target.value)}/></div><div className="tree">{tree(scene.entry)}{scene.root.children.filter(k=>k!==scene.entry.id).map(k=>tree(scene.nodes.get(k)!))}</div></>:<div className="asset-list">{p.assets.map(a=><div key={a.id}><ImageIcon size={16}/><code>{a.id.slice(-12)}</code></div>)}{!p.assets.length&&<p>当前关卡使用矢量图形。生成纹理后会出现在这里。</p>}<button className="outline" onClick={()=>{setTask('image');promptBox.current?.focus()}}><ImagePlus size={15}/>生成纹理</button></div>}
  <div className="side-bottom"><button onClick={()=>setDialog('projects')}><FolderOpen/>项目与示例<ChevronRight/></button><button onClick={()=>setDialog('history')}><History/>版本历史<span>R{p.revision}</span></button><button onClick={()=>setDialog('keys')}><Keyboard/>操作指南<ChevronRight/></button></div></aside>
- <main><div className="workspace-title"><div><div className="project-path"><span className="project-dot"/>关卡编辑器</div><h1>{p.title}<small>.oui</small></h1></div><div className="run-actions"><Tool icon={Undo2} label="撤销上次修改" onClick={undo} disabled={!p.history.length}/><Tool icon={RotateCcw} label="重新试玩" onClick={()=>play(true)}/><button className="primary" onClick={()=>play()}>{mode==='play'?<Pause/>:<Play fill="currentColor"/>}{mode==='play'?'暂停检查':mode==='inspect'?'继续试玩':'试玩关卡'}</button></div></div>
+ <main><div className="workspace-title"><div><div className="project-path"><span className="project-dot"/>关卡编辑器</div><h1>{p.title}<small>.oui</small></h1></div><div className="run-actions"><Tool icon={Undo2} label="撤销上次修改" onClick={undo} disabled={!undoTarget(p)}/><Tool icon={RotateCcw} label="重新试玩" onClick={()=>play(true)}/><button className="primary" onClick={()=>play()}>{mode==='play'?<Pause/>:<Play fill="currentColor"/>}{mode==='play'?'暂停检查':mode==='inspect'?'继续试玩':'试玩关卡'}</button></div></div>
  <section className="canvas-card" ref={canvasPanel}><div className="canvas-head"><div className="view-tabs"><button className={view==='canvas'?'on':''} onClick={()=>setView('canvas')}><Layers3/>场景</button><button className={view==='code'?'on':''} onClick={()=>setView('code')}><Code2/>源码</button></div><div className="canvas-tools"><Tool icon={MousePointer2} label="编辑选取" active={mode==='edit'} onClick={()=>{setMode('edit');setDraft('')}}/><Tool icon={Grid2X2} label="显示网格" active={grid} onClick={()=>setGrid(!grid)}/><select aria-label="画布缩放" value={zoom} onChange={e=>setZoom(+e.target.value)}>{[.75,1,1.25,1.5].map(v=><option key={v} value={v}>{v*100}%</option>)}</select><Tool icon={Maximize2} label="切换全屏" onClick={()=>{(document.fullscreenElement?document.exitFullscreen():canvasPanel.current?.requestFullscreen())?.catch(e=>setError(e.message))}}/></div></div>
  {view==='canvas'?<div className="stage"><Canvas scene={draftView??(mode==='edit'?scene:liveScene)} world={draftView?undefined:world} mode={draftView?'edit':mode} selected={selected} assets={p.assets} grid={grid} zoom={zoom} onError={setError} onRun={()=>play()} onPick={(h,a,m)=>{if(draft)return;pick(h.key,m);setAnchor(a)}} onMove={(id,[x,y])=>{if(draft)return;const pos=scene.nodes.get(id)?.props.position??[0,0];editProp(id,'position',[Math.round(pos[0]+x),Math.round(pos[1]+y)])}}/></div>:<div className="source"><textarea aria-label="OpenUI 源码" spellCheck={false} value={code} onChange={e=>setCode(e.target.value)}/><button className="outline" onClick={()=>run(()=>apply(code,'保存源码'))}><Save size={14}/>提交源码</button></div>}
  <div className="canvas-foot"><span><i className={'mode-dot '+mode}/>{draft?'生成草稿':mode==='edit'?'编辑模式':mode==='inspect'?'暂停检查':'试玩中'}</span><span>{world?.pendingRestart?'结构已变更 · 需要重新试玩':scene.root.props.viewport.join(' × ')}<em/>60 Hz</span></div></section>

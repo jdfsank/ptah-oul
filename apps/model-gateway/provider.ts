@@ -3,6 +3,7 @@ import { Agent, Runner, OpenAIProvider, setTracingDisabled } from '@openai/agent
 import {readFileSync} from 'node:fs'
 import {signatures} from '../../packages/game-schema'
 import {actions} from '../../packages/authoring'
+import {compile} from '../../packages/scene-compiler'
 setTracingDisabled(true)
 export const sample=readFileSync(new URL('../../tests/fixtures/platformer.oui',import.meta.url),'utf8')
 const official='https://api.openai.com/v1'
@@ -17,6 +18,20 @@ export function publicSettings() {
   return Object.fromEntries((['TEXT','IMAGE'] as const).map(k=>{const {model,baseURL,apiKey}=settings(k);return [k,{model,baseURL,configured:!!apiKey}]}))
 }
 export interface Task {txId:string;sceneId:string;baseRevision:number;mode:'create'|'patch';source:string;instruction:string;assets:string[];selection?:unknown;repair?:{draft:string;error:string}}
+function contextSource(task:Task) {
+  if(task.mode!=='patch'||task.source.length<40000||!Array.isArray(task.selection)||!task.selection.length)return task.source
+  const scene=compile(task.source,task.assets),keep=new Set<string>(['root',scene.entry.statement])
+  function include(id:string,levels:number){const n=scene.nodes.get(id);if(!n)return;keep.add(n.statement);if(levels>0)n.children.forEach(c=>include(c,levels-1))}
+  for(const selection of task.selection){
+    if(typeof selection?.authorId!=='string')continue
+    const n=scene.nodes.get(selection.authorId);if(!n)continue
+    include(n.id,2)
+    if(n.parent)include(n.parent,1)
+    for(let a=n;a.parent;){const parent=scene.nodes.get(a.parent)!;keep.add(parent.statement);a=parent}
+  }
+  for(const n of scene.nodes.values())if(['ResourceRegistry','PrefabRegistry'].includes(n.type))include(n.id,2)
+  return [...scene.index.values()].filter(s=>s.id.startsWith('$')||keep.has(s.id)).map(s=>s.raw).join('\n')
+}
 export async function* generate(task:Task,signal:AbortSignal) {
   const cfg=settings('TEXT')
   if(!cfg.apiKey)throw Error('请在服务端配置 TEXT_API_KEY')
@@ -46,7 +61,7 @@ export async function* generate(task:Task,signal:AbortSignal) {
     task.mode==='patch'?'Return only changed or new declarations. Keep stable identities, unrelated properties and names. Focus on selected nodes and required dependencies.':'Create a complete reachable level with working movement, score, goal and restart. Use a coherent illustrated scene of colored polygons.',
     'Schema (each line lists allowed properties):',signatures,'Actions: '+Object.keys(actions).join(', '),'Reference level:',sample
   ].join('\n')})
-  const result=await runner.run(agent,JSON.stringify({request:task.instruction,baseline:task.source,assets:task.assets,selection:task.selection,repair:task.repair}),{stream:true,maxTurns:1,signal})
+  const result=await runner.run(agent,JSON.stringify({request:task.instruction,baseline:contextSource(task),assets:task.assets,selection:task.selection,repair:task.repair}),{stream:true,maxTurns:1,signal})
   let completed=false
   for await(const event of result)if(event.type==='raw_model_stream_event'){
     const data=event.data
