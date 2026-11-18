@@ -68,7 +68,7 @@ export class World {
   }
   private blocks(i:Instance,s:Instance){return this.instances.has(s.key)&&this.enabled(s)&&((i.def.props.collision_mask??1)&(s.def.props.collision_layer??1))!==0}
   private move(i:Instance,input:Input) {
-    const controller=i.children.find(c=>c.def.type.endsWith('Controller')&&this.enabled(c)),p=controller?.def.props??{}
+    const controller=i.children.find(c=>c.def.type.endsWith('Controller')&&this.enabled(c)),p=controller?{...controller.def.props,...controller.overrides}:{}
     const bindings=this.scene.root.props.input_map
     const held=(name:string,edge=false)=>i.input&&(bindings[name]??[]).some((k:string)=>(edge?input.pressed:input.down).has(k))
     const axis=(a:string,b:string)=>Number(held(a))-Number(held(b))

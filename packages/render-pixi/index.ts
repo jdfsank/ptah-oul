@@ -3,12 +3,12 @@ import {identity,matrix,multiply,transform,PickRegistry,type Matrix,type Point} 
 import type {Scene,NodeDef,Values} from '../scene-compiler'
 import type {World} from '../runtime'
 import type {Asset} from '../project-io'
-type Drawing={key:string;id:string;type:string;p:Values;mat:Matrix;parent:Matrix;z:number;order:number;layer:number;locked:boolean}
+type Drawing={key:string;id:string;type:string;p:Values;mat:Matrix;parent:Matrix;z:number;order:number;layer:number;hud:boolean;locked:boolean}
 type Cached={item:Container;signature:string;polygon:Point[];texture?:Texture}
 const rect=(x:number,y:number,w:number,h:number):Point[]=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]
 const paintable=new Set(['Polygon2D','Sprite2D','AnimatedSprite2D','Label','Button'])
 export class Viewport {
- app=new Application();picks=new PickRegistry();private cache=new Map<string,Cached>();private selection=new Graphics()
+ app=new Application();picks=new PickRegistry();private cache=new Map<string,Cached>();private selection=new Graphics();private displayOrder:string[]= []
  private assets=new Map<string,Texture>();private assetData=new Map<string,Uint8Array>();private loadEpoch=0
  async init(host:HTMLElement){await this.app.init({width:960,height:540,background:0x1e243e,preference:'webgl',antialias:true,resolution:Math.min(devicePixelRatio,2),autoDensity:true});this.app.stop();host.appendChild(this.app.canvas);this.app.stage.addChild(this.selection)}
  async textures(assets:Asset[]) {
@@ -25,18 +25,18 @@ export class Viewport {
     if(newAssets.size)this.clear()
   }catch(e){for(const t of newAssets.values())t.destroy(true);throw e}
  }
- private clear(){for(const c of this.cache.values()){c.item.destroy({children:true});c.texture?.destroy(false)}this.cache.clear()}
+ private clear(){this.displayOrder=[];for(const c of this.cache.values()){c.item.destroy({children:true});c.texture?.destroy(false)}this.cache.clear()}
  destroy(){this.loadEpoch++;this.clear();for(const t of this.assets.values())t.destroy(true);this.app.destroy(true,{children:true})}
  draw(scene:Scene,world:World|undefined,selected:string[],grid:boolean,zoom=1) {
   const [w,h]=scene.root.props.viewport
   if(this.app.screen.width!==w||this.app.screen.height!==h)this.app.renderer.resize(w,h)
   let order=0
   const list:Drawing[]=[],matrices=new Map<string,Matrix>(),cameras:{m:Matrix;p:Values;scope:string}[]=[]
-  const walk=(n:NodeDef,key:string,parent:Matrix,z:number,layer:number,visible:boolean,locked:boolean,tint:number)=>{
+  const walk=(n:NodeDef,key:string,parent:Matrix,z:number,layer:number,visible:boolean,locked:boolean,tint:number,hud:boolean)=>{
     const i=world?.instances.get(key)
     if(world&&!i)return
     const p=i?world!.props(i):n.props,isHud=n.type==='CanvasLayer'
-    if(isHud){parent=identity;layer=p.layer??1}
+    if(isHud){parent=identity;layer=p.layer??1;hud=true}
     const m=multiply(parent,matrix(i?.x??p.position?.[0]??0,i?.y??p.position?.[1]??0,p.rotation??0,p.scale??[1,1]))
     matrices.set(key,m)
     if(p.modulate){const c=parseInt(p.modulate.slice(1),16);tint=(((((tint>>16)&255)*((c>>16)&255)/255)<<16)|((((tint>>8)&255)*((c>>8)&255)/255)<<8)|((tint&255)*(c&255)/255))}
@@ -46,24 +46,26 @@ export class Viewport {
     if(visible&&paintable.has(n.type)){
       let texture=p.texture
       if(n.type==='AnimatedSprite2D')texture=p.animations[p.animation].frames[Math.floor(i?.frame??0)]
-      list.push({key,id:n.id,type:n.type,p:{...p,texture,tint},mat:m,parent,z,layer,order:order++,locked})
+      list.push({key,id:n.id,type:n.type,p:{...p,texture,tint},mat:m,parent,z,layer,hud,order:order++,locked})
     }
-    if(i)i.children.forEach(c=>walk(c.def,c.key,m,z,layer,visible,locked,tint))
-    else for(const child of n.children){const def=scene.nodes.get(child);if(def&&!['PrefabRegistry','ResourceRegistry'].includes(def.type))walk(def,'/'+child,m,z,layer,visible,locked,tint)}
+    if(i)i.children.forEach(c=>walk(c.def,c.key,m,z,layer,visible,locked,tint,hud))
+    else for(const child of n.children){const def=scene.nodes.get(child);if(def&&!['PrefabRegistry','ResourceRegistry'].includes(def.type))walk(def,'/'+child,m,z,layer,visible,locked,tint,hud)}
   }
-  walk(scene.entry,'/'+scene.entry.id,identity,0,0,true,false,0xffffff)
+  walk(scene.entry,'/'+scene.entry.id,identity,0,0,true,false,0xffffff,false)
   const cam=cameras[0],at=cam?.p.follow?matrices.get(cam.scope+'/'+cam.p.follow):cam?.m
   const [sx,sy]=cam?.p.zoom??[1,1],camera:Matrix=at?[sx,0,0,sy,w/2-at[4]*sx,h/2-at[5]*sy]:identity
   const editor:Matrix=[zoom,0,0,zoom,(1-zoom)*w/2,(1-zoom)*h/2]
   list.sort((a,b)=>a.layer-b.layer||a.z-b.z||a.order-b.order)
   this.picks.entries=[]
-  const used=new Set<string>()
+  const used=new Set<string>();let reordered=list.length!==this.displayOrder.length
   for(const d of list){
+    if(!reordered&&this.displayOrder[used.size]!==d.key)reordered=true
     used.add(d.key)
-    const view=multiply(editor,d.layer===0?camera:identity),m=multiply(view,d.mat),p=d.p
+    const view=multiply(editor,d.hud?identity:camera),m=multiply(view,d.mat),p=d.p
     const signature=JSON.stringify([d.type,p.polygon,p.color,p.text,p.font_size,p.size,p.texture,p.region,p.centered,p.offset,p.flip_h,p.flip_v])
     let c=this.cache.get(d.key)
     if(!c||c.signature!==signature){
+      reordered=true
       c?.item.destroy({children:true});c?.texture?.destroy(false)
       let item:Container,poly:Point[],crop:Texture|undefined
       if(d.type==='Polygon2D'){
@@ -84,17 +86,29 @@ export class Viewport {
       }
       c={item,signature,polygon:poly,texture:crop};this.cache.set(d.key,c);this.app.stage.addChild(item)
     }
-    c.item.setFromMatrix(new PixiMatrix(...m));c.item.tint=p.tint;this.app.stage.setChildIndex(c.item,this.app.stage.children.length-1)
+    c.item.setFromMatrix(new PixiMatrix(...m));c.item.tint=p.tint
     this.picks.entries.push({key:d.key,id:d.id,matrix:m,parent:multiply(view,d.parent),polygon:c.polygon,locked:d.locked})
   }
   for(const [k,c] of this.cache)if(!used.has(k)){c.item.destroy({children:true});c.texture?.destroy(false);this.cache.delete(k)}
   this.selection.clear()
   if(grid){for(let x=0;x<w;x+=32)this.selection.moveTo(x,0).lineTo(x,h);for(let y=0;y<h;y+=32)this.selection.moveTo(0,y).lineTo(w,y);this.selection.stroke({color:0xffffff,alpha:.12,width:1})}
-  for(const hit of this.picks.entries)if(selected.includes(hit.key)){
-    const pts=hit.polygon.map(v=>transform(hit.matrix,v)),xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),l=Math.min(...xs)-3,t=Math.min(...ys)-3,r=Math.max(...xs)+3,b=Math.max(...ys)+3
+  for(const key of selected){
+    const instance=world?.instances.get(key),def=instance?.def??scene.nodes.get(key.slice(1))
+    if(!def)continue
+    const family=new Set<string>()
+    function collect(n:NodeDef){family.add((instance?.scope??'')+'/'+n.id);for(const id of n.children){const child=scene.nodes.get(id);if(child)collect(child)}}
+    collect(def)
+    const pts=this.picks.entries.filter(hit=>family.has(hit.key)).flatMap(hit=>hit.polygon.map(v=>transform(hit.matrix,v)))
+    if(!pts.length)continue
+    const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),l=Math.min(...xs)-3,t=Math.min(...ys)-3,r=Math.max(...xs)+3,b=Math.max(...ys)+3
     this.selection.rect(l,t,r-l,b-t).stroke({color:0xffcb7c,width:1.5})
     for(const [x,y] of rect(l,t,r-l,b-t))this.selection.rect(x-2.5,y-2.5,5,5).fill(0xffdd9c)
   }
-  this.app.stage.setChildIndex(this.selection,this.app.stage.children.length-1);this.app.render()
+  if(reordered){
+    this.displayOrder=list.map(d=>d.key)
+    for(const [index,key] of this.displayOrder.entries())this.app.stage.setChildIndex(this.cache.get(key)!.item,index)
+    this.app.stage.setChildIndex(this.selection,this.app.stage.children.length-1)
+  }
+  this.app.render()
  }
 }

@@ -1,6 +1,7 @@
 import http from 'node:http'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import {pathToFileURL} from 'node:url'
 import {z} from 'zod'
 import {createHash} from 'node:crypto'
 import {generate,generateImage,publicSettings} from './provider'
@@ -8,7 +9,7 @@ import {compile,applyPatch} from '../../packages/scene-compiler'
 import {Diagnostic} from '../../packages/authoring'
 import {profile,type Envelope} from '../../packages/authoring/stream'
 const taskSchema=z.object({txId:z.string().uuid(),sceneId:z.string().min(1).max(150),baseRevision:z.number().int().nonnegative(),mode:z.enum(['create','patch']),source:z.string().max(500000),instruction:z.string().min(1).max(12000),assets:z.array(z.string().max(150)).max(1000).default([]),selection:z.unknown().optional(),repair:z.object({draft:z.string().max(500000),error:z.string().max(3000)}).optional()})
-const history=new Map<string,{fingerprint:string;events:Envelope[];finished:boolean}>()
+
 async function body(req:http.IncomingMessage){
   const chunks:Buffer[]=[];let bytes=0
   for await(const c of req){bytes+=c.length;if(bytes>2_000_000)throw Error('请求过大');chunks.push(c)}
@@ -21,7 +22,9 @@ function message(e:unknown) {
 }
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex')
 const dist=path.resolve('dist')
-const server=http.createServer(async(req,res)=>{
+export function createGateway(){
+const history=new Map<string,{fingerprint:string;events:Envelope[];finished:boolean}>()
+return http.createServer(async(req,res)=>{
   const url=new URL(req.url??'/', 'http://localhost'),route=url.pathname
   function json(status:number,data:unknown){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data))}
   if(req.method==='GET'&&route==='/api/config')return json(200,publicSettings())
@@ -65,4 +68,5 @@ const server=http.createServer(async(req,res)=>{
   }catch(e){if(!res.headersSent)json(e instanceof z.ZodError?400:502,{error:e instanceof z.ZodError?'请求字段无效':message(e)})}
   finally{clearTimeout(timer)}
 })
-server.listen(Number(process.env.PORT||8787),process.env.HOST||'127.0.0.1',()=>console.log('Ptah listening on port '+(process.env.PORT||8787)))
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)createGateway().listen(Number(process.env.PORT||8787),process.env.HOST||'127.0.0.1',()=>console.log('Ptah listening on port '+(process.env.PORT||8787)))
