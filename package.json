@@ -1,0 +1,35 @@
+{
+  "name": "ptah-oul",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently -k \"node --import tsx --env-file-if-exists=.env apps/model-gateway/server.ts\" \"vite\"",
+    "build": "tsc --noEmit && vite build",
+    "start": "node --import tsx --env-file-if-exists=.env apps/model-gateway/server.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@openai/agents": "0.22.0",
+    "@openuidev/lang-core": "1.1.1",
+    "fflate": "0.8.3",
+    "openai": "7.59.0",
+    "pixi.js": "8.23.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "concurrently": "10.0.7",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}
