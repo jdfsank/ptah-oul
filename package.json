@@ -13,9 +13,12 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@fontsource/dm-sans": "5.3.0",
     "@openai/agents": "0.22.0",
     "@openuidev/lang-core": "1.1.1",
     "fflate": "0.8.3",
+    "lucide-react": "1.74.0",
     "openai": "7.59.0",
     "pixi.js": "8.23.0",
     "react": "19.3.1",

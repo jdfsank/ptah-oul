@@ -8,7 +8,7 @@ const shapes:Record<string,Record<string,z.ZodType>>={
  StaticBody2D:{...spatial,...body},CharacterBody2D:{...spatial,...body},Area2D:{...spatial,...body,monitoring:b},
  CollisionShape2D:{position:v,shape:z.discriminatedUnion('type',[z.strictObject({type:z.literal('RectangleShape2D'),size}),z.strictObject({type:z.literal('CircleShape2D'),radius:pos})])},
  Polygon2D:{...spatial,polygon:z.array(v).min(3),color},Sprite2D:{...spatial,...sprite},AnimatedSprite2D:{...spatial,...sprite,animations:z.record(s,z.strictObject({frames:z.array(s).min(1),fps:pos,loop:b.optional()})),animation:s,playing:b},
- Camera2D:{...spatial,zoom:size,follow:s},CanvasLayer:{layer:n.int(),visible:b},Label:{...spatial,text:s,color,font_size:pos},Button:{...spatial,text:s,color,size,action},
+ Camera2D:{...spatial,zoom:size,follow:s},CanvasLayer:{layer:n.int(),visible:b},Label:{...spatial,text:s,color,font_size:pos},Button:{...spatial,text:s,color,font_size:pos,size,action},
  PlatformerController:{left_action:s,right_action:s,jump_action:s,speed:pos,jump_speed:pos,gravity:n.nonnegative()},TopDownController:{left_action:s,right_action:s,up_action:s,down_action:s,speed:pos},
  SignalRule:{signal:s,filter_group:s,once:b,action},Timer:{wait_time:pos,autostart:b,one_shot:b},
  StateMachine:{initial:s,states:z.array(z.strictObject({name:s,on_enter:action.optional(),on_exit:action.optional()})).min(1),transitions:z.array(z.strictObject({from:s,to:s,event:s,condition:b.optional()}))},
