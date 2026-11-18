@@ -49,6 +49,7 @@ import type { LucideIcon } from 'lucide-react'
 import twilight from './examples/twilight.oui?raw'
 import platformer from '../../tests/fixtures/platformer.oui?raw'
 import topdown from '../../tests/fixtures/topdown.oui?raw'
+import coinLane from '../../tests/fixtures/official-topdown.oui?raw'
 import {
   compile,
   applyPatch,
@@ -80,6 +81,7 @@ const examples = [
   { name: '暮光遗迹', kind: '平台跳跃', source: twilight },
   { name: '晶石回廊', kind: '俯视收集', source: topdown },
   { name: '初始试炼', kind: '平台跳跃', source: platformer },
+  { name: '金币小径', kind: '模型生成 · 俯视收集', source: coinLane },
 ]
 const iconFor = (n: NodeDef): LucideIcon =>
   ({

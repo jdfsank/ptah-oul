@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import { World, Clock } from '../packages/runtime'
 import { compile, applyPatch } from '../packages/scene-compiler'
 import { sweep } from '../packages/runtime/physics'
-for (const level of ['platformer', 'topdown'])
+for (const level of ['platformer', 'topdown', 'official-topdown'])
   test(
     level + ' is playable and restart restores score, inputs and pickups',
     () => {
@@ -25,7 +25,7 @@ for (const level of ['platformer', 'topdown'])
         w.update(
           applyPatch(
             s,
-            s.index.get('player_visual')!.raw.replace('#38BDF8', '#ff9900'),
+            s.index.get('player_visual')!.raw.replace(/#[0-9A-F]{6}/i, '#ff9900'),
           ),
           1,
         ),
@@ -37,7 +37,7 @@ for (const level of ['platformer', 'topdown'])
         w.update(
           applyPatch(
             s,
-            s.index.get('player_shape')!.raw.replace('28, 36', '30, 36'),
+            s.index.get('player_shape')!.raw.replace(/size: \[\d+, \d+\]/, 'size: [30, 36]'),
           ),
           2,
         ),

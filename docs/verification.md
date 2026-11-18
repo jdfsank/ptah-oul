@@ -7,6 +7,7 @@
 | 路径 | 实测结果 |
 | --- | --- |
 | OpenAI 官方语言服务 | Agents SDK 经 Responses API 请求 gpt-6.2-sol。返回的局部 OpenUI 声明通过解析、合并和场景校验，角色控制器 speed 从 260 变为 180。 |
+| OpenAI 官方自然语言创建 | 用中文要求生成俯视金币关卡。第一版触发语义诊断，经一次定向修复后得到 25 条有效声明。固定输入回放完成拾取与通关，源码保存在 tests/fixtures/official-topdown.oui。 |
 | OpenAI 官方生图服务 | 独立 Images API 客户端请求 gpt-image-2.6-sunburst，获得 833755 字节的 PNG，通过文件头与尺寸校验。 |
 | 两种兼容接口 | 本地协议服务覆盖 Responses、Chat Completions、独立地址和凭据、正常结束、输出截断和同事务重放。 |
 | 游戏运行 | 平台跳跃、俯视收集均通过计分、到达终点、锁定输入、重开恢复测试。另测薄墙连续碰撞、时钟、实例身份和生命周期。 |
