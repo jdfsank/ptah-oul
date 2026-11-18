@@ -15,5 +15,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Run browser acceptance
+        run: |
+          if browser_path=$(command -v google-chrome || command -v chromium); then
+            CHROMIUM_EXECUTABLE="$browser_path" npm run test:e2e
+          else
+            npx playwright install --with-deps chromium
+            npm run test:e2e
+          fi
